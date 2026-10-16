@@ -32,12 +32,17 @@ struct Player {
 
 #[macroquad::main(window_conf)]
 async fn main() {
-    let sizes: [f32; 2] = [screen_width(), screen_height()];
+    //Constants
+    let sizes: [f32; 2] = [screen_width(), screen_height()]; //Constant at run-time
     const PLAYER_SWAP_KEYS: [KeyCode; 2] = [KeyCode::W, KeyCode::Up];
     const PLAYER_MOVE_KEYS: [KeyCode; 4] = [KeyCode::A, KeyCode::D, KeyCode::Left, KeyCode::Right];
     const SPEED: f32 = 300.0;
     const COLOR: Color = GREEN;
     const RADIUS: f32 = 30.0;
+
+    let mut player1_moving: bool = false;
+    let mut player2_moving: bool = false;
+
     let mut player1 = Player {
         x: sizes[0] / 2.0,
         y: 0.0,
@@ -50,20 +55,39 @@ async fn main() {
     };
 
     loop {
-        //player1 movement:
+        //player1 movement side-to-side
         if is_key_down(PLAYER_MOVE_KEYS[0]) {
             player1.x -= SPEED * get_frame_time();
         }
         if is_key_down(PLAYER_MOVE_KEYS[1]) {
             player1.x += SPEED * get_frame_time();
         }
-        //player2 movement
+        //player2 movement side-to-side
         if is_key_down(PLAYER_MOVE_KEYS[2]) {
             player2.x -= SPEED * get_frame_time();
         }
         if is_key_down(PLAYER_MOVE_KEYS[3]) {
             player2.x += SPEED * get_frame_time();
         }
+
+        //swap movement
+        //player 1
+        if is_key_pressed(PLAYER_SWAP_KEYS[0]) {
+            if !player1_moving {
+                player1_moving = true;
+            }
+        }
+
+        //player 2
+        if is_key_down(PLAYER_SWAP_KEYS[1]) {
+            if !player2_moving {
+                player2_moving = true;
+            }
+        }
+
+        //Detects swap and makes both players go up/down:
+        //--TODO--
+
         clear_background(BLACK);
         player1.x = player1.x.clamp(RADIUS, sizes[0] - RADIUS);
         player1.y = player1.y.clamp(RADIUS, sizes[1] - RADIUS);

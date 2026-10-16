@@ -1,4 +1,4 @@
-use macroquad::prelude::*;
+use macroquad::{input::KeyCode::U, prelude::*};
 
 fn window_conf() -> Conf {
     Conf {
@@ -28,6 +28,30 @@ struct Player {
     x: f32,
     y: f32,
     radius: f32,
+    grav: Gravity,
+    moving: bool,
+}
+
+enum Gravity {
+    Up,
+    Down,
+}
+
+fn swap_move(player: &mut Player, sizes: &[f32; 2], radius: &f32, speed: &f32) {
+    match player.grav {
+        Gravity::Up => {
+            let limit: f32 = sizes[1] - radius;
+            if !(player.y >= limit) {
+                player.y += speed * get_frame_time();
+            }
+        }
+        Gravity::Down => {
+            let limit: f32 = *radius;
+            if !(player.y <= limit) {
+                player.y -= speed * get_frame_time();
+            }
+        }
+    };
 }
 
 #[macroquad::main(window_conf)]
@@ -37,21 +61,26 @@ async fn main() {
     const PLAYER_SWAP_KEYS: [KeyCode; 2] = [KeyCode::W, KeyCode::Up];
     const PLAYER_MOVE_KEYS: [KeyCode; 4] = [KeyCode::A, KeyCode::D, KeyCode::Left, KeyCode::Right];
     const SPEED: f32 = 300.0;
+    const DOWN_SPEED: f32 = 500.0;
     const COLOR: Color = GREEN;
     const RADIUS: f32 = 30.0;
 
-    let mut player1_moving: bool = false;
-    let mut player2_moving: bool = false;
+    let mut player1_grav: Gravity = Gravity::Up;
+    let mut player2_grav: Gravity = Gravity::Down;
 
     let mut player1 = Player {
         x: sizes[0] / 2.0,
         y: 0.0,
         radius: RADIUS,
+        grav: Gravity::Up,
+        moving: false,
     };
     let mut player2 = Player {
         x: sizes[0] / 2.0,
         y: sizes[1] - RADIUS,
         radius: RADIUS,
+        grav: Gravity::Down,
+        moving: false,
     };
 
     loop {
@@ -73,20 +102,26 @@ async fn main() {
         //swap movement
         //player 1
         if is_key_pressed(PLAYER_SWAP_KEYS[0]) {
-            if !player1_moving {
-                player1_moving = true;
+            if !player1.moving {
+                player1.moving = true;
             }
         }
 
         //player 2
-        if is_key_down(PLAYER_SWAP_KEYS[1]) {
-            if !player2_moving {
-                player2_moving = true;
+        if is_key_pressed(PLAYER_SWAP_KEYS[1]) {
+            if !player2.moving {
+                player2.moving = true;
             }
         }
 
         //Detects swap and makes both players go up/down:
-        //--TODO--
+        if player1.moving {
+            swap_move(&mut player1, &sizes, &RADIUS, &DOWN_SPEED);
+        }
+
+        if player2.moving {
+            swap_move(&mut player2, &sizes, &RADIUS, &DOWN_SPEED);
+        }
 
         clear_background(BLACK);
         player1.x = player1.x.clamp(RADIUS, sizes[0] - RADIUS);

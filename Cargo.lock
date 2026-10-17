@@ -257,10 +257,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5a651516ddc9168ebd67b24afd085a718be02f8858fe406591b013d101ce2f40"
 
 [[package]]
+name = "random"
+version = "0.14.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9d62d9cce151a97168445d78542558d3bddf6cf99f283c475f2eaf5cc14c364a"
+
+[[package]]
 name = "rust-good-game"
 version = "0.1.0"
 dependencies = [
  "macroquad",
+ "random",
 ]
 
 [[package]]

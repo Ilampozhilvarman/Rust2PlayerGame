@@ -19,7 +19,7 @@ const SAFE_COLOR: Color = GRAY;
 const RADIUS: f32 = 30.0;
 
 const OBSTACLE_SPEED: f32 = 200.0;
-const SPAWN_INTERVAL: f32 = 1.0;
+const SPAWN_INTERVAL: f32 = 0.2;
 const CONTACT_EPS: f32 = 2.0;
 const BOUNDS_EPS: f32 = 0.5;
 const HAZARD_ROLL: i32 = 3;
@@ -183,7 +183,6 @@ struct Player {
     radius: f32,
     grav: Gravity,
     moving: bool,
-    supported: bool,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -206,7 +205,6 @@ impl Player {
             radius: RADIUS,
             grav,
             moving: false,
-            supported: false,
         }
     }
 
@@ -370,6 +368,23 @@ fn out_of_bounds(player: &Player, sizes: &[f32; 2]) -> bool {
     player.y - player.radius < -BOUNDS_EPS || player.y + player.radius > sizes[1] + BOUNDS_EPS
 }
 
+fn at_gravity_limit(player: &Player, sizes: &[f32; 2]) -> bool {
+    match player.grav {
+        Gravity::Up => player.y <= player.radius + BOUNDS_EPS,
+        Gravity::Down => player.y >= sizes[1] - player.radius - BOUNDS_EPS,
+    }
+}
+
+fn is_supported(player: &Player, obstacles: &[Obstacle]) -> bool {
+    obstacles
+        .iter()
+        .any(|o| !o.is_red() && gravity_side_contact(player, o))
+}
+
+fn should_fall(player: &Player, obstacles: &[Obstacle], sizes: &[f32; 2]) -> bool {
+    !at_gravity_limit(player, sizes) && !is_supported(player, obstacles)
+}
+
 #[macroquad::main(window_conf)]
 async fn main() {
     rand::srand(
@@ -457,21 +472,12 @@ async fn main() {
                 dead = hits_red(&player1, &obstacles) || hits_red(&player2, &obstacles);
             }
 
-            let now1 = obstacles
-                .iter()
-                .any(|o| !o.is_red() && gravity_side_contact(&player1, o));
-            if player1.supported && !now1 && !dead {
+            if !dead && should_fall(&player1, &obstacles, &sizes) {
                 player1.moving = true;
             }
-            player1.supported = now1;
-
-            let now2 = obstacles
-                .iter()
-                .any(|o| !o.is_red() && gravity_side_contact(&player2, o));
-            if player2.supported && !now2 && !dead {
+            if !dead && should_fall(&player2, &obstacles, &sizes) {
                 player2.moving = true;
             }
-            player2.supported = now2;
 
             player1.x = player1.x.clamp(RADIUS, sizes[0] - RADIUS);
             player2.x = player2.x.clamp(RADIUS, sizes[0] - RADIUS);
@@ -634,5 +640,63 @@ mod tests {
         assert!(rect(100.0, -100.0, 40.0, 40.0, false, -100.0).offscreen(600.0));
         assert!(rect(100.0, 700.0, 40.0, 40.0, false, 100.0).offscreen(600.0));
         assert!(!rect(100.0, 300.0, 40.0, 40.0, false, 100.0).offscreen(600.0));
+    }
+
+    #[test]
+    fn at_gravity_limit_only_at_the_gravity_side_edge() {
+        let sizes = [800.0, 600.0];
+        assert!(at_gravity_limit(
+            &Player::new(100.0, RADIUS, Gravity::Up),
+            &sizes
+        ));
+        assert!(at_gravity_limit(
+            &Player::new(100.0, 600.0 - RADIUS, Gravity::Down),
+            &sizes
+        ));
+        assert!(!at_gravity_limit(
+            &Player::new(100.0, 300.0, Gravity::Up),
+            &sizes
+        ));
+        assert!(!at_gravity_limit(
+            &Player::new(100.0, 300.0, Gravity::Down),
+            &sizes
+        ));
+        assert!(!at_gravity_limit(
+            &Player::new(100.0, RADIUS, Gravity::Down),
+            &sizes
+        ));
+    }
+
+    #[test]
+    fn unsupported_mid_screen_falls() {
+        let sizes = [800.0, 600.0];
+        let player = Player::new(100.0, 300.0, Gravity::Down);
+        assert!(should_fall(&player, &[], &sizes));
+    }
+
+    #[test]
+    fn resting_on_platform_does_not_fall() {
+        let sizes = [800.0, 600.0];
+        let platform = rect(100.0, 300.0, 40.0, 40.0, false, 0.0);
+        let player = Player::new(100.0, 280.0 - RADIUS, Gravity::Down);
+        assert!(!should_fall(&player, &[platform], &sizes));
+    }
+
+    #[test]
+    fn resting_at_edge_does_not_fall() {
+        let sizes = [800.0, 600.0];
+        let player = Player::new(100.0, RADIUS, Gravity::Up);
+        assert!(!should_fall(&player, &[], &sizes));
+    }
+
+    #[test]
+    fn frozen_mid_air_after_push_recovers() {
+        let sizes = [800.0, 600.0];
+        let mut player = Player::new(100.0, 300.0, Gravity::Down);
+        player.moving = false;
+        if should_fall(&player, &[], &sizes) {
+            player.moving = true;
+        }
+        assert!(player.moving);
     }
 }

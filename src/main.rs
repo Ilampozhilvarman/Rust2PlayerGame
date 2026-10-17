@@ -22,7 +22,7 @@ const OBSTACLE_SPEED: f32 = 200.0;
 const SPAWN_INTERVAL: f32 = 1.0;
 const CONTACT_EPS: f32 = 2.0;
 const BOUNDS_EPS: f32 = 0.5;
-const HAZARD_ROLL: i32 = 5;
+const HAZARD_ROLL: i32 = 3;
 
 const CIRCLE_MIN_R: f32 = 20.0;
 const CIRCLE_MAX_R: f32 = 45.0;

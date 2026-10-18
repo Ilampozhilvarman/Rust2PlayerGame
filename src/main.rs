@@ -1,6 +1,7 @@
 use macroquad::prelude::*;
 use std::fs;
 use std::time::{SystemTime, UNIX_EPOCH};
+mod score;
 
 fn window_conf() -> Conf {
     Conf {
@@ -633,11 +634,20 @@ async fn main() {
     let mut state = GameState::Menu;
     let mut settings_sel: usize = 0;
     let mut listening = false;
-
+    let mut top_scores: Vec<score::ScoreEntry> = Vec::new();
+    let mut scores_rx = Some(score::fetch_top_scores());
+    let mut survival = 0.0_f32;
     loop {
+        if let Some(rx) = &scores_rx {
+            if let Ok(list) = rx.try_recv() {
+                top_scores = list;
+                scores_rx = None;
+            }
+        }
+
         if state == GameState::Playing {
             let dt = get_frame_time();
-
+            survival += dt;
             for (i, player) in players.iter_mut().enumerate() {
                 let mut dx = 0.0;
                 if is_key_down(controls.left(i)) {
@@ -708,6 +718,7 @@ async fn main() {
 
             if dead {
                 state = GameState::GameOver;
+                score::submit_score("Ilam".to_string(), survival as u32);
             }
         } else if state == GameState::Menu {
             if is_key_pressed(KeyCode::Key1) {
@@ -724,6 +735,7 @@ async fn main() {
             if state == GameState::Playing {
                 obstacles.clear();
                 spawn_timer = 0.0;
+                survival = 0.0;
                 from_bottom = true;
                 players = start_players(mode, &sizes);
             }
@@ -760,12 +772,14 @@ async fn main() {
         } else if state == GameState::GameOver && is_key_pressed(KeyCode::R) {
             obstacles.clear();
             spawn_timer = 0.0;
+            survival = 0.0;
             from_bottom = true;
             players = start_players(mode, &sizes);
             state = GameState::Playing;
         } else if state == GameState::GameOver && is_key_pressed(KeyCode::M) {
             obstacles.clear();
             players.clear();
+            scores_rx = Some(score::fetch_top_scores());
             state = GameState::Menu;
         }
 
@@ -814,6 +828,15 @@ async fn main() {
                 40.0,
                 PLAYER_COLOR,
             );
+            for (i, e) in top_scores.iter().enumerate() {
+                draw_text(
+                    &format!("{}. {} - {}", i + 1, e.name, e.score),
+                    20.0,
+                    40.0 + i as f32 * 30.0,
+                    28.0,
+                    WHITE,
+                );
+            }
         }
 
         if state == GameState::Settings {

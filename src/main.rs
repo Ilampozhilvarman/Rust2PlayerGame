@@ -614,6 +614,14 @@ fn start_players(mode: Mode, sizes: &[f32; 2]) -> Vec<Player> {
     }
 }
 
+fn format_time(seconds: f32) -> String {
+    format!("{seconds:.1}s")
+}
+
+fn score_from_time(seconds: f32) -> u32 {
+    seconds.max(0.0).floor() as u32
+}
+
 #[macroquad::main(window_conf)]
 async fn main() {
     rand::srand(
@@ -638,11 +646,11 @@ async fn main() {
     let mut scores_rx = Some(score::fetch_top_scores());
     let mut survival = 0.0_f32;
     loop {
-        if let Some(rx) = &scores_rx {
-            if let Ok(list) = rx.try_recv() {
-                top_scores = list;
-                scores_rx = None;
-            }
+        if let Some(rx) = &scores_rx
+            && let Ok(list) = rx.try_recv()
+        {
+            top_scores = list;
+            scores_rx = None;
         }
 
         if state == GameState::Playing {
@@ -718,7 +726,7 @@ async fn main() {
 
             if dead {
                 state = GameState::GameOver;
-                score::submit_score("Ilam".to_string(), survival as u32);
+                score::submit_score("Ilam".to_string(), score_from_time(survival));
             }
         } else if state == GameState::Menu {
             if is_key_pressed(KeyCode::Key1) {
@@ -791,6 +799,18 @@ async fn main() {
             draw_circle(player.x, player.y, player.radius, PLAYER_COLOR);
         }
 
+        if state == GameState::Playing {
+            let label = format!("Time: {}", format_time(survival));
+            let label_dims = measure_text(&label, None, 40, 1.0);
+            draw_text(
+                &label,
+                (sizes[0] - label_dims.width) / 2.0,
+                50.0,
+                40.0,
+                WHITE,
+            );
+        }
+
         if state == GameState::Menu {
             let title = "GRAVITY DODGE";
             let title_dims = measure_text(title, None, 70, 1.0);
@@ -828,14 +848,9 @@ async fn main() {
                 40.0,
                 PLAYER_COLOR,
             );
-            for (i, e) in top_scores.iter().enumerate() {
-                draw_text(
-                    &format!("{}. {} - {}", i + 1, e.name, e.score),
-                    20.0,
-                    40.0 + i as f32 * 30.0,
-                    28.0,
-                    WHITE,
-                );
+            if let Some(best) = top_scores.first() {
+                let label = format!("High Score: {} - {}", best.name, best.score);
+                draw_text(&label, 20.0, 40.0, 32.0, WHITE);
             }
         }
 
@@ -901,14 +916,32 @@ async fn main() {
                 80.0,
                 HAZARD_COLOR,
             );
+            let survived = format!("You survived {}", format_time(survival));
+            let survived_dims = measure_text(&survived, None, 44, 1.0);
+            draw_text(
+                &survived,
+                (sizes[0] - survived_dims.width) / 2.0,
+                (sizes[1] - title_dims.height) / 2.0 + 70.0,
+                44.0,
+                WHITE,
+            );
+            let score = format!("Score: {}", score_from_time(survival));
+            let score_dims = measure_text(&score, None, 44, 1.0);
+            draw_text(
+                &score,
+                (sizes[0] - score_dims.width) / 2.0,
+                (sizes[1] - title_dims.height) / 2.0 + 130.0,
+                44.0,
+                WHITE,
+            );
             let hint = "Press R to restart    M for menu";
             let hint_dims = measure_text(hint, None, 36, 1.0);
             draw_text(
                 hint,
                 (sizes[0] - hint_dims.width) / 2.0,
-                (sizes[1] + hint_dims.height) / 2.0 + 40.0,
+                (sizes[1] + hint_dims.height) / 2.0 + 170.0,
                 36.0,
-                WHITE,
+                PLAYER_COLOR,
             );
         }
 
@@ -1163,5 +1196,22 @@ mod tests {
         for key in ALL_KEYCODES {
             assert_eq!(keycode_from_name(&keycode_name(*key)), Some(*key));
         }
+    }
+
+    #[test]
+    fn format_time_uses_one_decimal() {
+        assert_eq!(format_time(0.0), "0.0s");
+        assert_eq!(format_time(5.0), "5.0s");
+        assert_eq!(format_time(12.34), "12.3s");
+        assert_eq!(format_time(12.36), "12.4s");
+    }
+
+    #[test]
+    fn score_is_whole_seconds_survived() {
+        assert_eq!(score_from_time(0.0), 0);
+        assert_eq!(score_from_time(0.9), 0);
+        assert_eq!(score_from_time(12.3), 12);
+        assert_eq!(score_from_time(12.9), 12);
+        assert_eq!(score_from_time(-3.0), 0);
     }
 }

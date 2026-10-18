@@ -1,4 +1,5 @@
 use macroquad::prelude::*;
+use std::fs;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 fn window_conf() -> Conf {
@@ -9,8 +10,17 @@ fn window_conf() -> Conf {
     }
 }
 
-const PLAYER_SWAP_KEYS: [KeyCode; 2] = [KeyCode::W, KeyCode::Up];
-const PLAYER_MOVE_KEYS: [KeyCode; 4] = [KeyCode::A, KeyCode::D, KeyCode::Left, KeyCode::Right];
+const DEFAULT_BINDINGS: [KeyCode; 6] = [
+    KeyCode::A,
+    KeyCode::D,
+    KeyCode::W,
+    KeyCode::Left,
+    KeyCode::Right,
+    KeyCode::Up,
+];
+const BINDING_ROWS: usize = 6;
+const SETTINGS_ROWS: usize = BINDING_ROWS + 1;
+const CONTROLS_FILE: &str = "keybinds.cfg";
 const SPEED: f32 = 300.0;
 const DOWN_SPEED: f32 = 500.0;
 const PLAYER_COLOR: Color = GREEN;
@@ -193,8 +203,216 @@ enum Gravity {
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum GameState {
+    Menu,
+    Settings,
     Playing,
     GameOver,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum Mode {
+    OnePlayer,
+    TwoPlayer,
+}
+
+const ALL_KEYCODES: &[KeyCode] = &[
+    KeyCode::Space,
+    KeyCode::Apostrophe,
+    KeyCode::Comma,
+    KeyCode::Minus,
+    KeyCode::Period,
+    KeyCode::Slash,
+    KeyCode::Key0,
+    KeyCode::Key1,
+    KeyCode::Key2,
+    KeyCode::Key3,
+    KeyCode::Key4,
+    KeyCode::Key5,
+    KeyCode::Key6,
+    KeyCode::Key7,
+    KeyCode::Key8,
+    KeyCode::Key9,
+    KeyCode::Semicolon,
+    KeyCode::Equal,
+    KeyCode::A,
+    KeyCode::B,
+    KeyCode::C,
+    KeyCode::D,
+    KeyCode::E,
+    KeyCode::F,
+    KeyCode::G,
+    KeyCode::H,
+    KeyCode::I,
+    KeyCode::J,
+    KeyCode::K,
+    KeyCode::L,
+    KeyCode::M,
+    KeyCode::N,
+    KeyCode::O,
+    KeyCode::P,
+    KeyCode::Q,
+    KeyCode::R,
+    KeyCode::S,
+    KeyCode::T,
+    KeyCode::U,
+    KeyCode::V,
+    KeyCode::W,
+    KeyCode::X,
+    KeyCode::Y,
+    KeyCode::Z,
+    KeyCode::LeftBracket,
+    KeyCode::Backslash,
+    KeyCode::RightBracket,
+    KeyCode::GraveAccent,
+    KeyCode::World1,
+    KeyCode::World2,
+    KeyCode::Escape,
+    KeyCode::Enter,
+    KeyCode::Tab,
+    KeyCode::Backspace,
+    KeyCode::Insert,
+    KeyCode::Delete,
+    KeyCode::Right,
+    KeyCode::Left,
+    KeyCode::Down,
+    KeyCode::Up,
+    KeyCode::PageUp,
+    KeyCode::PageDown,
+    KeyCode::Home,
+    KeyCode::End,
+    KeyCode::CapsLock,
+    KeyCode::ScrollLock,
+    KeyCode::NumLock,
+    KeyCode::PrintScreen,
+    KeyCode::Pause,
+    KeyCode::F1,
+    KeyCode::F2,
+    KeyCode::F3,
+    KeyCode::F4,
+    KeyCode::F5,
+    KeyCode::F6,
+    KeyCode::F7,
+    KeyCode::F8,
+    KeyCode::F9,
+    KeyCode::F10,
+    KeyCode::F11,
+    KeyCode::F12,
+    KeyCode::F13,
+    KeyCode::F14,
+    KeyCode::F15,
+    KeyCode::F16,
+    KeyCode::F17,
+    KeyCode::F18,
+    KeyCode::F19,
+    KeyCode::F20,
+    KeyCode::F21,
+    KeyCode::F22,
+    KeyCode::F23,
+    KeyCode::F24,
+    KeyCode::F25,
+    KeyCode::Kp0,
+    KeyCode::Kp1,
+    KeyCode::Kp2,
+    KeyCode::Kp3,
+    KeyCode::Kp4,
+    KeyCode::Kp5,
+    KeyCode::Kp6,
+    KeyCode::Kp7,
+    KeyCode::Kp8,
+    KeyCode::Kp9,
+    KeyCode::KpDecimal,
+    KeyCode::KpDivide,
+    KeyCode::KpMultiply,
+    KeyCode::KpSubtract,
+    KeyCode::KpAdd,
+    KeyCode::KpEnter,
+    KeyCode::KpEqual,
+    KeyCode::LeftShift,
+    KeyCode::LeftControl,
+    KeyCode::LeftAlt,
+    KeyCode::LeftSuper,
+    KeyCode::RightShift,
+    KeyCode::RightControl,
+    KeyCode::RightAlt,
+    KeyCode::RightSuper,
+    KeyCode::Menu,
+    KeyCode::Back,
+    KeyCode::Unknown,
+];
+
+fn keycode_name(key: KeyCode) -> String {
+    format!("{key:?}")
+}
+
+fn keycode_from_name(name: &str) -> Option<KeyCode> {
+    ALL_KEYCODES
+        .iter()
+        .copied()
+        .find(|k| keycode_name(*k) == name)
+}
+
+#[derive(Clone, Copy)]
+struct Controls {
+    bindings: [KeyCode; 6],
+}
+
+impl Controls {
+    fn new() -> Self {
+        Controls {
+            bindings: DEFAULT_BINDINGS,
+        }
+    }
+
+    fn left(&self, player: usize) -> KeyCode {
+        self.bindings[player * 3]
+    }
+
+    fn right(&self, player: usize) -> KeyCode {
+        self.bindings[player * 3 + 1]
+    }
+
+    fn toggle(&self, player: usize) -> KeyCode {
+        self.bindings[player * 3 + 2]
+    }
+
+    fn set(&mut self, index: usize, key: KeyCode) {
+        self.bindings[index] = key;
+    }
+
+    fn reset(&mut self) {
+        self.bindings = DEFAULT_BINDINGS;
+    }
+
+    fn to_text(self) -> String {
+        self.bindings
+            .iter()
+            .map(|k| keycode_name(*k))
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
+    fn from_text(text: &str) -> Self {
+        let mut controls = Controls::new();
+        for (index, line) in text.lines().enumerate() {
+            if index >= controls.bindings.len() {
+                break;
+            }
+            if let Some(key) = keycode_from_name(line.trim()) {
+                controls.bindings[index] = key;
+            }
+        }
+        controls
+    }
+}
+
+fn save_controls(controls: &Controls) {
+    let _ = fs::write(CONTROLS_FILE, controls.to_text());
+}
+
+fn load_controls() -> Controls {
+    fs::read_to_string(CONTROLS_FILE)
+        .map(|text| Controls::from_text(&text))
+        .unwrap_or_else(|_| Controls::new())
 }
 
 impl Player {
@@ -385,6 +603,16 @@ fn should_fall(player: &Player, obstacles: &[Obstacle], sizes: &[f32; 2]) -> boo
     !at_gravity_limit(player, sizes) && !is_supported(player, obstacles)
 }
 
+fn start_players(mode: Mode, sizes: &[f32; 2]) -> Vec<Player> {
+    match mode {
+        Mode::OnePlayer => vec![Player::new(sizes[0] / 2.0, RADIUS, Gravity::Up)],
+        Mode::TwoPlayer => vec![
+            Player::new(sizes[0] / 2.0, RADIUS, Gravity::Up),
+            Player::new(sizes[0] / 2.0, sizes[1] - RADIUS, Gravity::Down),
+        ],
+    }
+}
+
 #[macroquad::main(window_conf)]
 async fn main() {
     rand::srand(
@@ -396,42 +624,36 @@ async fn main() {
 
     let sizes: [f32; 2] = [screen_width(), screen_height()];
 
-    let mut player1 = Player::new(sizes[0] / 2.0, RADIUS, Gravity::Up);
-    let mut player2 = Player::new(sizes[0] / 2.0, sizes[1] - RADIUS, Gravity::Down);
+    let mut controls = load_controls();
+    let mut mode = Mode::TwoPlayer;
+    let mut players: Vec<Player> = Vec::new();
     let mut obstacles: Vec<Obstacle> = Vec::new();
     let mut spawn_timer = 0.0_f32;
     let mut from_bottom = true;
-    let mut state = GameState::Playing;
+    let mut state = GameState::Menu;
+    let mut settings_sel: usize = 0;
+    let mut listening = false;
 
     loop {
         if state == GameState::Playing {
             let dt = get_frame_time();
 
-            let mut dx1 = 0.0;
-            if is_key_down(PLAYER_MOVE_KEYS[0]) {
-                dx1 -= SPEED * dt;
+            for (i, player) in players.iter_mut().enumerate() {
+                let mut dx = 0.0;
+                if is_key_down(controls.left(i)) {
+                    dx -= SPEED * dt;
+                }
+                if is_key_down(controls.right(i)) {
+                    dx += SPEED * dt;
+                }
+                move_horizontal(player, dx, &obstacles, &sizes);
             }
-            if is_key_down(PLAYER_MOVE_KEYS[1]) {
-                dx1 += SPEED * dt;
-            }
-            move_horizontal(&mut player1, dx1, &obstacles, &sizes);
 
-            let mut dx2 = 0.0;
-            if is_key_down(PLAYER_MOVE_KEYS[2]) {
-                dx2 -= SPEED * dt;
-            }
-            if is_key_down(PLAYER_MOVE_KEYS[3]) {
-                dx2 += SPEED * dt;
-            }
-            move_horizontal(&mut player2, dx2, &obstacles, &sizes);
-
-            if is_key_pressed(PLAYER_SWAP_KEYS[0]) && !player1.moving {
-                player1.toggle_gravity();
-                player1.moving = true;
-            }
-            if is_key_pressed(PLAYER_SWAP_KEYS[1]) && !player2.moving {
-                player2.toggle_gravity();
-                player2.moving = true;
+            for (i, player) in players.iter_mut().enumerate() {
+                if is_key_pressed(controls.toggle(i)) && !player.moving {
+                    player.toggle_gravity();
+                    player.moving = true;
+                }
             }
 
             spawn_timer += dt;
@@ -441,66 +663,210 @@ async fn main() {
                 from_bottom = !from_bottom;
             }
 
-            let support1 = support_vy(&player1, &obstacles);
-            let support2 = support_vy(&player2, &obstacles);
+            let supports: Vec<Option<f32>> =
+                players.iter().map(|p| support_vy(p, &obstacles)).collect();
             for obstacle in obstacles.iter_mut() {
                 obstacle.update(dt);
             }
-            if let Some(vy) = support1 {
-                player1.y += vy * dt;
-            }
-            if let Some(vy) = support2 {
-                player2.y += vy * dt;
-            }
-
-            if player1.moving {
-                swap_move(&mut player1, &sizes, &RADIUS, &DOWN_SPEED);
-            }
-            if player2.moving {
-                swap_move(&mut player2, &sizes, &RADIUS, &DOWN_SPEED);
+            for (player, support) in players.iter_mut().zip(supports) {
+                if let Some(vy) = support {
+                    player.y += vy * dt;
+                }
             }
 
-            let mut dead = hits_red(&player1, &obstacles) || hits_red(&player2, &obstacles);
-            if !dead {
-                dead = resolve_obstacles(&mut player1, &obstacles, &sizes)
-                    || resolve_obstacles(&mut player2, &obstacles, &sizes);
+            for player in players.iter_mut() {
+                if player.moving {
+                    swap_move(player, &sizes, &RADIUS, &DOWN_SPEED);
+                }
             }
+
+            let mut dead = players.iter().any(|p| hits_red(p, &obstacles));
             if !dead {
-                dead = out_of_bounds(&player1, &sizes) || out_of_bounds(&player2, &sizes);
+                for player in players.iter_mut() {
+                    dead |= resolve_obstacles(player, &obstacles, &sizes);
+                }
             }
             if !dead {
-                dead = hits_red(&player1, &obstacles) || hits_red(&player2, &obstacles);
+                dead = players.iter().any(|p| out_of_bounds(p, &sizes));
+            }
+            if !dead {
+                dead = players.iter().any(|p| hits_red(p, &obstacles));
             }
 
-            if !dead && should_fall(&player1, &obstacles, &sizes) {
-                player1.moving = true;
-            }
-            if !dead && should_fall(&player2, &obstacles, &sizes) {
-                player2.moving = true;
+            if !dead {
+                for player in players.iter_mut() {
+                    if should_fall(player, &obstacles, &sizes) {
+                        player.moving = true;
+                    }
+                }
             }
 
-            player1.x = player1.x.clamp(RADIUS, sizes[0] - RADIUS);
-            player2.x = player2.x.clamp(RADIUS, sizes[0] - RADIUS);
+            for player in players.iter_mut() {
+                player.x = player.x.clamp(RADIUS, sizes[0] - RADIUS);
+            }
             obstacles.retain(|o| !o.offscreen(sizes[1]));
 
             if dead {
                 state = GameState::GameOver;
             }
-        } else if is_key_pressed(KeyCode::R) {
+        } else if state == GameState::Menu {
+            if is_key_pressed(KeyCode::Key1) {
+                mode = Mode::OnePlayer;
+                state = GameState::Playing;
+            } else if is_key_pressed(KeyCode::Key2) {
+                mode = Mode::TwoPlayer;
+                state = GameState::Playing;
+            } else if is_key_pressed(KeyCode::S) {
+                settings_sel = 0;
+                listening = false;
+                state = GameState::Settings;
+            }
+            if state == GameState::Playing {
+                obstacles.clear();
+                spawn_timer = 0.0;
+                from_bottom = true;
+                players = start_players(mode, &sizes);
+            }
+        } else if state == GameState::Settings {
+            if listening {
+                if let Some(key) = get_last_key_pressed() {
+                    if key == KeyCode::Escape {
+                        listening = false;
+                    } else {
+                        controls.set(settings_sel, key);
+                        save_controls(&controls);
+                        listening = false;
+                    }
+                }
+            } else {
+                if is_key_pressed(KeyCode::Down) {
+                    settings_sel = (settings_sel + 1) % SETTINGS_ROWS;
+                }
+                if is_key_pressed(KeyCode::Up) {
+                    settings_sel = (settings_sel + SETTINGS_ROWS - 1) % SETTINGS_ROWS;
+                }
+                if is_key_pressed(KeyCode::Enter) || is_key_pressed(KeyCode::Space) {
+                    if settings_sel == BINDING_ROWS {
+                        controls.reset();
+                        save_controls(&controls);
+                    } else {
+                        listening = true;
+                    }
+                }
+                if is_key_pressed(KeyCode::Escape) {
+                    state = GameState::Menu;
+                }
+            }
+        } else if state == GameState::GameOver && is_key_pressed(KeyCode::R) {
             obstacles.clear();
             spawn_timer = 0.0;
             from_bottom = true;
-            player1 = Player::new(sizes[0] / 2.0, RADIUS, Gravity::Up);
-            player2 = Player::new(sizes[0] / 2.0, sizes[1] - RADIUS, Gravity::Down);
+            players = start_players(mode, &sizes);
             state = GameState::Playing;
+        } else if state == GameState::GameOver && is_key_pressed(KeyCode::M) {
+            obstacles.clear();
+            players.clear();
+            state = GameState::Menu;
         }
 
         clear_background(BLACK);
         for obstacle in &obstacles {
             obstacle.draw();
         }
-        draw_circle(player1.x, player1.y, player1.radius, PLAYER_COLOR);
-        draw_circle(player2.x, player2.y, player2.radius, PLAYER_COLOR);
+        for player in &players {
+            draw_circle(player.x, player.y, player.radius, PLAYER_COLOR);
+        }
+
+        if state == GameState::Menu {
+            let title = "GRAVITY DODGE";
+            let title_dims = measure_text(title, None, 70, 1.0);
+            draw_text(
+                title,
+                (sizes[0] - title_dims.width) / 2.0,
+                sizes[1] / 2.0 - 80.0,
+                70.0,
+                WHITE,
+            );
+            let one = "1 - One Player";
+            let one_dims = measure_text(one, None, 40, 1.0);
+            draw_text(
+                one,
+                (sizes[0] - one_dims.width) / 2.0,
+                sizes[1] / 2.0 + 20.0,
+                40.0,
+                PLAYER_COLOR,
+            );
+            let two = "2 - Two Players";
+            let two_dims = measure_text(two, None, 40, 1.0);
+            draw_text(
+                two,
+                (sizes[0] - two_dims.width) / 2.0,
+                sizes[1] / 2.0 + 80.0,
+                40.0,
+                PLAYER_COLOR,
+            );
+            let settings = "S - Settings";
+            let settings_dims = measure_text(settings, None, 40, 1.0);
+            draw_text(
+                settings,
+                (sizes[0] - settings_dims.width) / 2.0,
+                sizes[1] / 2.0 + 140.0,
+                40.0,
+                PLAYER_COLOR,
+            );
+        }
+
+        if state == GameState::Settings {
+            let title = "SETTINGS";
+            let title_dims = measure_text(title, None, 60, 1.0);
+            draw_text(
+                title,
+                (sizes[0] - title_dims.width) / 2.0,
+                sizes[1] / 2.0 - 210.0,
+                60.0,
+                WHITE,
+            );
+            let row_h = 48.0;
+            let start_y = sizes[1] / 2.0 - 130.0;
+            for row in 0..SETTINGS_ROWS {
+                let selected = row == settings_sel;
+                let label = if row == BINDING_ROWS {
+                    "Reset to Defaults".to_string()
+                } else {
+                    let player = row / 3 + 1;
+                    let slot = ["Left", "Right", "Toggle"][row % 3];
+                    format!("Player {player} {slot}")
+                };
+                let value = if row == BINDING_ROWS {
+                    String::new()
+                } else if listening && selected {
+                    "Press a key...".to_string()
+                } else {
+                    keycode_name(controls.bindings[row])
+                };
+                let color = if selected { YELLOW } else { WHITE };
+                let label_dims = measure_text(&label, None, 36, 1.0);
+                let x = (sizes[0] - label_dims.width) / 2.0 - 180.0;
+                let y = start_y + row as f32 * row_h;
+                draw_text(&label, x, y, 36.0, color);
+                if !value.is_empty() {
+                    draw_text(&value, x + 420.0, y, 36.0, color);
+                }
+            }
+            let hint = if listening {
+                "Press a new key... (Esc to cancel)"
+            } else {
+                "Up/Down select    Enter rebind    Esc back"
+            };
+            let hint_dims = measure_text(hint, None, 30, 1.0);
+            draw_text(
+                hint,
+                (sizes[0] - hint_dims.width) / 2.0,
+                start_y + SETTINGS_ROWS as f32 * row_h + 40.0,
+                30.0,
+                PLAYER_COLOR,
+            );
+        }
 
         if state == GameState::GameOver {
             let title = "GAME OVER";
@@ -512,7 +878,7 @@ async fn main() {
                 80.0,
                 HAZARD_COLOR,
             );
-            let hint = "Press R to restart";
+            let hint = "Press R to restart    M for menu";
             let hint_dims = measure_text(hint, None, 36, 1.0);
             draw_text(
                 hint,
@@ -698,5 +1064,81 @@ mod tests {
             player.moving = true;
         }
         assert!(player.moving);
+    }
+
+    #[test]
+    fn one_player_mode_starts_one_player() {
+        let sizes = [800.0, 600.0];
+        let players = start_players(Mode::OnePlayer, &sizes);
+        assert_eq!(players.len(), 1);
+        assert_eq!(players[0].grav, Gravity::Up);
+        assert_eq!(players[0].y, RADIUS);
+    }
+
+    #[test]
+    fn two_player_mode_starts_two_players() {
+        let sizes = [800.0, 600.0];
+        let players = start_players(Mode::TwoPlayer, &sizes);
+        assert_eq!(players.len(), 2);
+        assert_eq!(players[0].grav, Gravity::Up);
+        assert_eq!(players[0].y, RADIUS);
+        assert_eq!(players[1].grav, Gravity::Down);
+        assert_eq!(players[1].y, sizes[1] - RADIUS);
+    }
+
+    #[test]
+    fn default_controls_match_original_scheme() {
+        let controls = Controls::new();
+        assert_eq!(controls.left(0), KeyCode::A);
+        assert_eq!(controls.right(0), KeyCode::D);
+        assert_eq!(controls.toggle(0), KeyCode::W);
+        assert_eq!(controls.left(1), KeyCode::Left);
+        assert_eq!(controls.right(1), KeyCode::Right);
+        assert_eq!(controls.toggle(1), KeyCode::Up);
+    }
+
+    #[test]
+    fn set_updates_the_selected_slot() {
+        let mut controls = Controls::new();
+        controls.set(1, KeyCode::J);
+        assert_eq!(controls.right(0), KeyCode::J);
+        assert_eq!(controls.left(0), KeyCode::A);
+        controls.set(5, KeyCode::Slash);
+        assert_eq!(controls.toggle(1), KeyCode::Slash);
+    }
+
+    #[test]
+    fn reset_restores_defaults() {
+        let mut controls = Controls::new();
+        controls.set(0, KeyCode::Z);
+        controls.set(4, KeyCode::Backspace);
+        controls.reset();
+        assert_eq!(controls.bindings, DEFAULT_BINDINGS);
+    }
+
+    #[test]
+    fn text_round_trips() {
+        let mut controls = Controls::new();
+        controls.set(0, KeyCode::Comma);
+        controls.set(3, KeyCode::F5);
+        let restored = Controls::from_text(&controls.to_text());
+        assert_eq!(restored.bindings, controls.bindings);
+    }
+
+    #[test]
+    fn from_text_keeps_defaults_for_missing_or_invalid_lines() {
+        let restored = Controls::from_text("Q\nnotakey\n\nUp");
+        assert_eq!(restored.bindings[0], KeyCode::Q);
+        assert_eq!(restored.bindings[1], DEFAULT_BINDINGS[1]);
+        assert_eq!(restored.bindings[2], DEFAULT_BINDINGS[2]);
+        assert_eq!(restored.bindings[3], KeyCode::Up);
+        assert_eq!(restored.bindings[5], DEFAULT_BINDINGS[5]);
+    }
+
+    #[test]
+    fn keycode_name_round_trips() {
+        for key in ALL_KEYCODES {
+            assert_eq!(keycode_from_name(&keycode_name(*key)), Some(*key));
+        }
     }
 }
